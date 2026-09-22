@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#101817">
+  <meta name="description" content="An interactive, local-first lab for exploring MobileNetV2 activations, convolution kernels, and Grad-CAM.">
+  <title>MobileNetV2 · Vision Lab</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23b9ef81'/%3E%3Cpath d='M8 23V9l8 9 8-9v14' fill='none' stroke='%23101817' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#workspace">Skip to workspace</a>
+<header class="topbar">
+  <button class="icon-button mobile-menu" id="menu-button" aria-label="Open input controls" aria-expanded="false">☰</button>
+  <a href="/" class="brand" aria-label="MobileNet Vision Lab home"><span class="brand-mark">m<span>↗</span></span><span>mobilenet<span class="brand-divider">/</span><strong>vision lab</strong></span></a>
+  <div class="topbar-right"><span class="status-pill" id="runtime-badge"><i></i> Local inference</span><a class="text-link" href="https://github.com/Duy1230/MobileNetv2-Visualization" target="_blank" rel="noopener noreferrer">Source code ↗</a></div>
+</header>
+<div class="scrim" id="scrim" hidden></div>
+<aside class="sidebar" id="sidebar" aria-label="Input and model controls">
+  <div class="sidebar-heading"><span class="eyebrow">YOUR WORKSPACE</span><span class="version">02</span></div>
+  <h2>Start with an image.</h2><p class="muted small">Follow its journey from pixels to a prediction.</p>
+  <label class="dropzone" id="dropzone" for="image-upload" tabindex="0">
+    <span class="upload-icon">↥</span><strong>Drop an image here</strong><span>or browse your files</span><small>JPG, PNG, WebP · up to 10 MiB</small>
+    <input id="image-upload" type="file" accept="image/jpeg,image/png,image/webp" class="visually-hidden">
+  </label>
+  <div class="label-row"><span class="field-label">Or try a diagnostic</span><span class="subtle">synthetic</span></div>
+  <div class="sample-options" aria-label="Synthetic diagnostic samples">
+    <button class="sample active" data-sample="shapes" aria-pressed="true"><span class="sample-art shapes"></span>Shapes</button>
+    <button class="sample" data-sample="stripes" aria-pressed="false"><span class="sample-art stripes"></span>Stripes</button>
+    <button class="sample" data-sample="spectrum" aria-pressed="false"><span class="sample-art spectrum"></span>Spectrum</button>
+  </div>
+  <div class="input-preview" id="input-preview" hidden><div class="label-row"><span class="field-label">What the model sees</span><span class="mono subtle">224 × 224</span></div><button id="enlarge-input" class="preview-button" aria-label="Enlarge model input"><img id="input-image" alt="Exact center-cropped RGB input supplied to the model"></button><p id="input-caption" class="small muted"></p></div>
+  <hr>
+  <label class="field-label" for="weights">Model weights</label>
+  <select id="weights"><option value="IMAGENET1K_V2">ImageNet V2 · trained</option><option value="IMAGENET1K_V1">ImageNet V1 · trained</option><option value="untrained">Offline demo · untrained</option></select>
+  <p class="small muted">Trained weights download once, then use the local cache. Demo mode requires no download.</p>
+  <div class="privacy-note"><span>◈</span><p><strong>Your image, your workspace.</strong> Images are processed on this server, not a third-party inference API. Sessions expire after 30 minutes of inactivity.</p></div>
+  <button id="clear-session" class="text-button" disabled>Clear image &amp; session</button>
+  <div class="sidebar-bottom"><span class="tiny-dot"></span> Built for curiosity. Grounded in PyTorch.</div>
+</aside>
+<main id="workspace" tabindex="-1">
+  <section class="hero"><div><div class="eyebrow hero-eyebrow"><span class="tiny-line"></span> NEURAL NETWORK INTERPRETABILITY</div><h1>See what the<br>network <em>sees.</em></h1><p>Look inside MobileNetV2. Explore the filters, trace the<br class="desktop-break"> features, and understand a model’s response.</p></div><div class="hero-diagram" aria-hidden="true"><span class="diagram-label">PIXELS → REPRESENTATION</span><div class="tensor-stack"><i></i><i></i><i></i><i></i><i></i><i></i></div><span class="diagram-caption">expand · filter · project</span></div></section>
+  <div class="notice warning" id="demo-warning" role="status" hidden></div>
+  <div class="notice error" id="error-box" role="alert" hidden><p id="error-message"></p><button id="offline-button" class="button secondary">Use offline demo</button></div>
+  <div class="metrics" aria-label="Model metrics">
+    <div class="metric"><span>PARAMETERS</span><strong id="metric-params">—</strong><small>Complete model</small></div>
+    <div class="metric"><span>COMPUTATION</span><strong id="metric-macs">—</strong><small>MACs · 224 × 224 input</small></div>
+    <div class="metric"><span>CONVOLUTIONS</span><strong id="metric-layers">—</strong><small>Every layer, discoverable</small></div>
+    <div class="metric"><span>FORWARD PASS</span><strong id="metric-time">—</strong><small id="metric-device">Measured on this server</small></div>
+  </div>
+  <section class="prediction-panel" aria-labelledby="prediction-title"><div class="prediction-heading"><span class="section-number">01</span><div><h2 id="prediction-title">The model’s first impression</h2><p id="prediction-note">Top-five softmax scores. Not calibrated confidence.</p></div><span class="pill" id="prediction-status">Awaiting input</span></div><div class="prediction-bars" id="predictions"><p class="muted">Analyze an image to reveal its class scores.</p></div></section>
+  <section class="explorer" aria-labelledby="explorer-title"><div class="explorer-heading"><div><span class="eyebrow">LOOK BENEATH THE SURFACE</span><h2 id="explorer-title">Inside the network</h2></div><button id="export-button" class="button secondary" disabled>↓ Export analysis</button></div>
+    <div class="tablist" role="tablist" aria-label="Visualization view"><button id="tab-activations" role="tab" aria-selected="true" aria-controls="panel-activations" data-tab="activations">Feature maps <span>01</span></button><button id="tab-filters" role="tab" aria-selected="false" aria-controls="panel-filters" data-tab="filters" tabindex="-1">Kernel studio <span>02</span></button><button id="tab-explain" role="tab" aria-selected="false" aria-controls="panel-explain" data-tab="explain" tabindex="-1">Explain <span>03</span></button><button id="tab-architecture" role="tab" aria-selected="false" aria-controls="panel-architecture" data-tab="architecture" tabindex="-1">Architecture <span>04</span></button></div>
+    <div class="layer-controls" id="layer-controls"><div class="layer-picker"><label class="field-label" for="layer-select">CONVOLUTION LAYER</label><div class="layer-select-row"><button class="icon-button" id="prev-layer" aria-label="Previous layer" disabled>←</button><select id="layer-select" disabled><option>Waiting for model…</option></select><button class="icon-button" id="next-layer" aria-label="Next layer" disabled>→</button></div></div><div class="layer-tags" id="layer-tags"></div></div>
+    <div class="stage-track" id="stage-track" aria-label="Network stages"></div>
+    <div class="loading-line" id="loading-line" hidden><span></span></div><div class="workspace-status" id="workspace-status" role="status" aria-live="polite">Preparing your workspace…</div>
+    <section id="panel-activations" role="tabpanel" aria-labelledby="tab-activations"><div class="view-heading"><div><h3>Feature atlas</h3><p>Raw convolution outputs, before batch normalization and activation. Click a channel to inspect it.</p></div><span id="activation-shape" class="mono subtle"></span></div>
+      <div class="display-controls"><label>Order<select id="sort"><option value="energy">Strongest response</option><option value="index">Channel index</option><option value="variance">Highest variance</option></select></label><label>Scale<select id="normalization"><option value="channel">Per channel</option><option value="layer">Entire layer</option></select></label><label>Color<select id="palette"><option value="viridis">Viridis</option><option value="ember">Ember</option><option value="gray">Grayscale</option></select></label><span class="scale-note">Display scaling never changes the raw data.</span></div>
+      <div class="channel-grid" id="activation-grid"><div class="empty-state"><span>⌘</span><h3>A new perspective awaits.</h3><p>Select an image or diagnostic to begin exploring.</p></div></div>
+      <div class="pager"><span id="channel-count" class="small muted">No channels loaded</span><div><button id="prev-page" class="icon-button" aria-label="Previous channel page" disabled>←</button><span id="page-label" class="mono">—</span><button id="next-page" class="icon-button" aria-label="Next channel page" disabled>→</button></div></div>
+      <div class="insight"><span>↳</span><p><strong>Read the patterns, not just the colors.</strong> Per-channel scaling reveals spatial structure, but hides differences in amplitude. Switch to “Entire layer” to compare response strength. Energy means mean absolute activation.</p></div>
+    </section>
+    <section id="panel-filters" role="tabpanel" aria-labelledby="tab-filters" hidden><div class="view-heading"><div><h3>The kernel studio</h3><p>Actual learned weights. Spatial filters and channel-mixing matrices tell different stories.</p></div></div><div class="display-controls"><label>Input-channel slice<select id="filter-input"><option value="0">0</option></select></label><span class="scale-note">Depthwise filters each belong to a different input channel.</span></div><div id="mixing-view" hidden><div class="matrix-container"><img id="mixing-image" alt="Pointwise channel-mixing weight matrix"></div><p id="mixing-caption" class="mono small"></p><div class="insight"><span>↳</span><p>A <strong>1 × 1 convolution</strong> mixes channels at each location; it has no spatial pattern to draw. Rows are output channels and columns are input channels. Colors use the complete matrix range.</p></div></div><div class="channel-grid" id="filter-grid"></div><div class="pager"><span id="filter-count" class="small muted"></span><div><button id="prev-filter-page" class="icon-button" aria-label="Previous filter page" disabled>←</button><span id="filter-page-label" class="mono">—</span><button id="next-filter-page" class="icon-button" aria-label="Next filter page" disabled>→</button></div></div></section>
+    <section id="panel-explain" role="tabpanel" aria-labelledby="tab-explain" hidden><div class="view-heading"><div><h3>Where does the model look?</h3><p>Grad-CAM highlights regions that contribute positively to a selected class score.</p></div><span class="pill">Class-specific</span></div><div class="cam-controls"><label>Target class<input id="class-target" type="search" list="class-options" placeholder="Search 1,000 ImageNet classes" autocomplete="off"><datalist id="class-options"></datalist></label><label>Overlay intensity<input id="cam-alpha" type="range" min="0" max="1" step="0.05" value="0.55"></label><button id="cam-button" class="button primary" disabled>Generate explanation ↗</button></div><p class="small muted">Uses the last convolution, <code>features.18.0</code> (7 × 7), enlarged to the exact 224 × 224 model input.</p><div class="cam-results" id="cam-results" hidden><figure><img id="cam-input" alt="Exact model input"><figcaption>Model input</figcaption></figure><figure><img id="cam-overlay" alt="Grad-CAM attribution overlay"><figcaption id="cam-caption">Class attribution</figcaption></figure><figure><img id="cam-heatmap" alt="Grad-CAM heatmap"><figcaption>Positive contribution · low → high</figcaption></figure></div><p id="cam-note" class="small muted"></p><button id="cam-download" class="text-button" hidden>↓ Download overlay PNG</button><div class="insight"><span>↳</span><p><strong>An explanation is not proof.</strong> Grad-CAM is a coarse, gradient-based attribution—not a segmentation, an object detector, or a causal account. Compare target classes; do not treat heatmap brightness as calibrated certainty.</p></div></section>
+    <section id="panel-architecture" role="tabpanel" aria-labelledby="tab-architecture" hidden><div class="view-heading"><div><h3>Small network. Deliberate design.</h3><p>All convolutional layers are discovered from the running model. Select a row to explore its output.</p></div></div><div class="architecture-lesson"><div><span>01 / EXPAND</span><h4>Make room to learn.</h4><p>A pointwise convolution expands the channel representation.</p></div><div><span>02 / FILTER</span><h4>Work channel by channel.</h4><p>A depthwise convolution extracts spatial patterns economically.</p></div><div><span>03 / PROJECT</span><h4>Keep the useful signal.</h4><p>A linear pointwise projection compresses channels. Compatible blocks add a residual connection.</p></div></div><p class="small muted">The first bottleneck skips expansion. Stage totals also include normalization parameters; MACs count convolution and linear multiply-accumulates only.</p><div class="table-scroll"><table><caption class="visually-hidden">MobileNetV2 convolution architecture</caption><thead><tr><th scope="col">Layer</th><th scope="col">Operation</th><th scope="col">Kernel / stride</th><th scope="col">Output C × H × W</th><th scope="col">Parameters</th><th scope="col">MACs</th></tr></thead><tbody id="architecture-body"></tbody></table></div></section>
+  </section>
+  <footer class="footer"><span>MobileNetV2 Vision Lab <span class="subtle">/ remastered</span></span><span><a href="https://arxiv.org/abs/1801.04381" target="_blank" rel="noopener noreferrer">MobileNetV2 paper ↗</a><a href="https://arxiv.org/abs/1610.02391" target="_blank" rel="noopener noreferrer">Grad-CAM paper ↗</a></span></footer>
+</main>
+<dialog id="channel-dialog"><div class="dialog-heading"><div><span class="eyebrow">CHANNEL INSPECTOR</span><h2 id="dialog-title"></h2></div><button class="icon-button" id="close-dialog" aria-label="Close inspector">×</button></div><div class="inspector-image"><img id="dialog-image" alt="Enlarged selected channel"></div><div id="dialog-stats" class="dialog-stats"></div><p class="small muted">Nearest-neighbor enlargement preserves the original grid. Statistics refer to raw values, not display colors.</p><button id="channel-download" class="button secondary">↓ Save displayed PNG</button></dialog>
+</body>
+</html>

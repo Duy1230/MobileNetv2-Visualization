@@ -1,6 +1,2 @@
-streamlit
-matplotlib
-torch
-numpy
-pillow
-torchvision
+# Compatibility alias for the original misspelled filename.
+-r requirements.txt

@@ -1,74 +1,39 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import torch.nn as nn
-import torchvision.transforms as transforms
-import torchvision
+"""Backwards-compatible helpers for notebooks using the original project."""
 import torch
-from PIL import Image
+from torchvision.models import MobileNet_V2_Weights, mobilenet_v2
 
+from engine import capture_outputs, get_layer, read_image
 
-def read_image(path):
-    image = Image.open(path).convert('RGB')
-    return image
-
-
-def show_image(image, color_map="gray"):
-    plt.imshow(image, cmap=color_map)
-    plt.axis("off")
-    plt.show()
+__all__ = ["read_image", "show_image", "load_mobileNet", "normalize_filter",
+           "get_layer_by_name", "preprocess_image", "get_multiple_intermediate_outputs"]
 
 
 def load_mobileNet():
-    model = torchvision.models.mobilenet_v2(pretrained=True)
-    model.eval()
-    return model
-
-
-def normalize_filter(filter):
-    min_val = filter.min()
-    max_val = filter.max()
-    normalized_filter = (filter - min_val) / (max_val - min_val)
-    return normalized_filter
-
-
-def get_layer_by_name(model, layer_name):
-    return model.get_submodule(layer_name)
+    return mobilenet_v2(weights=MobileNet_V2_Weights.IMAGENET1K_V1).eval()
 
 
 def preprocess_image(image):
-    transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-    ])
+    # The legacy helper retains the original V1 model + 256px resize pairing.
+    return MobileNet_V2_Weights.IMAGENET1K_V1.transforms()(image).unsqueeze(0)
 
-    img_tensor = transform(image)
 
-    # Normalize the image
-    normalize = transforms.Normalize(
-        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    img_tensor = normalize(img_tensor)
+def normalize_filter(filters):
+    values = filters.detach().clone()
+    span = values.max() - values.min()
+    return torch.zeros_like(values) if span < 1e-12 else (values - values.min()) / span
 
-    return img_tensor.unsqueeze(0)  # Add batch dimension
+
+def get_layer_by_name(model, layer_name):
+    return get_layer(model, layer_name)
 
 
 def get_multiple_intermediate_outputs(model, input_tensor, layer_names):
-    intermediate_outputs = {}
+    # A caller sharing this model across threads must provide its own lock.
+    return capture_outputs(model, input_tensor, layer_names)
 
-    def hook_fn(name):
-        def hook(module, input, output):
-            intermediate_outputs[name] = output.detach()
-        return hook
 
-    hooks = []
-    for name, module in model.named_modules():
-        if name in layer_names:
-            hooks.append(module.register_forward_hook(hook_fn(name)))
-
-    with torch.no_grad():
-        pred = model(input_tensor)
-
-    for hook in hooks:
-        hook.remove()
-
-    return intermediate_outputs, pred
+def show_image(image, color_map="gray"):
+    import matplotlib.pyplot as plt
+    plt.imshow(image, cmap=color_map)
+    plt.axis("off")
+    plt.show()
