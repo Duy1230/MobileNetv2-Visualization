@@ -16,7 +16,7 @@ import urllib.request
 from pathlib import Path
 
 from PIL import Image
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = Path(os.getenv("MNV2_TEST_OUTPUT", str(ROOT / "test-artifacts")))
@@ -89,11 +89,12 @@ try:
         assert page.locator("#metric-layers").inner_text() == "52"
         page.screenshot(path=str(OUTPUT / "desktop.png"), full_page=True)
         page.locator("#layer-select").select_option("features.2.conv.1.0")
-        page.wait_for_function("document.querySelector('#activation-shape').textContent === '96 × 56 × 56'")
+        # Locator assertions retry without eval(), preserving the app's strict CSP.
+        expect(page.locator("#activation-shape")).to_have_text("96 × 56 × 56", timeout=30000)
         page.locator("#next-page").click()
-        page.wait_for_function("document.querySelector('#page-label').textContent === '2 / 3'")
+        expect(page.locator("#page-label")).to_have_text("2 / 3", timeout=30000)
         page.locator("#sort").select_option("index")
-        page.wait_for_function("document.querySelector('#page-label').textContent === '1 / 3'")
+        expect(page.locator("#page-label")).to_have_text("1 / 3", timeout=30000)
         page.locator("#activation-grid .channel-card").first.click()
         assert page.locator("#channel-dialog").is_visible()
         assert "C000" in page.locator("#dialog-title").inner_text()
@@ -103,14 +104,14 @@ try:
         page.locator("#layer-select").select_option("features.18.0")
         page.wait_for_selector("#mixing-view", state="visible")
         assert "1280 output × 320 input" in page.locator("#mixing-caption").inner_text()
-        page.evaluate("document.activeElement.blur(); window.scrollTo(0,0)")
+        page.evaluate("() => { document.activeElement.blur(); window.scrollTo(0, 0); }")
         page.screenshot(path=str(OUTPUT / "kernels.png"), full_page=True)
         page.locator("#tab-explain").click()
         page.locator("#class-target").fill("0 · tench")
         page.locator("#cam-button").click()
         page.wait_for_selector("#cam-results", state="visible", timeout=30000)
         assert "tench" in page.locator("#cam-caption").inner_text()
-        page.evaluate("document.activeElement.blur(); window.scrollTo(0,0)")
+        page.evaluate("() => { document.activeElement.blur(); window.scrollTo(0, 0); }")
         page.screenshot(path=str(OUTPUT / "explain.png"), full_page=True)
         with page.expect_download() as downloaded:
             page.locator("#cam-download").click()
@@ -131,8 +132,8 @@ try:
         for width in [1440, 768, 390]:
             page.set_viewport_size({"width":width,"height":844})
             page.wait_for_timeout(150)
-            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"Overflow at {width}px"
-        page.evaluate("window.scrollTo(0,0)")
+            assert page.evaluate("() => document.documentElement.scrollWidth <= innerWidth"), f"Overflow at {width}px"
+        page.evaluate("() => window.scrollTo(0, 0)")
         page.screenshot(path=str(OUTPUT / "mobile.png"), full_page=True)
         page.locator("#menu-button").click()
         assert page.locator("#menu-button").get_attribute("aria-expanded") == "true"
@@ -140,7 +141,7 @@ try:
         Image.new("RGB", (360, 240), (80, 140, 100)).save(upload, format="PNG")
         page.locator("#image-upload").set_input_files({"name":"diagnostic.png",
             "mimeType":"image/png", "buffer":upload.getvalue()})
-        page.wait_for_function("document.querySelector('#input-caption').textContent.includes('Uploaded image')")
+        expect(page.locator("#input-caption")).to_contain_text("Uploaded image", timeout=30000)
         page.wait_for_selector("#activation-grid .channel-card")
         page.locator("#menu-button").click()
         page.locator("#clear-session").click()
